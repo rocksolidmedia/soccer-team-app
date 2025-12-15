@@ -1,5 +1,6 @@
 import { useState, type CSSProperties } from "react"
 import { players } from "./players"
+import type { Player } from "./types"
 import PlayerCard from "./PlayerCard"
 
 // Lucide (standard icons)
@@ -7,19 +8,30 @@ import { Users, Trash2, Icon } from "lucide-react"
 // Lucide Lab (soccer ball)
 import { soccerBall } from "@lucide/lab"
 
+type TeamResult = {
+  teamA: Player[]
+  teamB: Player[]
+  totalA: number
+  totalB: number
+  avgA: number
+  avgB: number
+}
+
+type BestCandidate = TeamResult & { score: number }
+
 function App() {
   // STATE
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [generatedIds, setGeneratedIds] = useState<number[] | null>(null)
 
-  // ✅ Put your lockup logo in /public and set the filename here:
+  // Put your lockup logo in /public and set the filename here:
   const logoUrl = "/lockup-logo.png"
 
   // DERIVED DATA
-  const sortedPlayers = [...players].sort((a, b) => b.skill - a.skill)
+  const sortedPlayers: Player[] = [...players].sort((a, b) => b.skill - a.skill)
   const canGenerate = selectedIds.length >= 8
 
-  const generatedPlayers = generatedIds
+  const generatedPlayers: Player[] = generatedIds
     ? sortedPlayers.filter((p) => generatedIds.includes(p.id))
     : []
 
@@ -31,7 +43,7 @@ function App() {
     if (!groups[position]) groups[position] = []
     groups[position].push(player)
     return groups
-  }, {} as Record<string, typeof sortedPlayers>)
+  }, {} as Record<string, Player[]>)
 
   function getPositionList(pos: string) {
     return playersByPosition[pos] ?? []
@@ -68,27 +80,17 @@ function App() {
   // - Even selected => equal team sizes ALWAYS
   // - Odd selected  => extra player goes to weaker team (by average)
   // - Score prioritizes: TOTAL difference, then AVG diff, then anti-stacking
-  function buildOptimalTeams(playersToSplit: typeof generatedPlayers) {
+  function buildOptimalTeams(playersToSplit: Player[]): TeamResult {
     const n = playersToSplit.length
     const big = Math.ceil(n / 2)
 
-    function sumTopK(team: typeof playersToSplit, k: number) {
+    function sumTopK(team: Player[], k: number) {
       const top = [...team].sort((a, b) => b.skill - a.skill).slice(0, k)
       return top.reduce((s, p) => s + p.skill, 0)
     }
 
-    function solveForTeamASize(teamASize: number) {
-      let best:
-        | {
-            teamA: typeof playersToSplit
-            teamB: typeof playersToSplit
-            totalA: number
-            totalB: number
-            avgA: number
-            avgB: number
-            score: number
-          }
-        | null = null
+    function solveForTeamASize(teamASize: number): BestCandidate {
+      let best: BestCandidate | null = null
 
       const totalAll = playersToSplit.reduce((s, p) => s + p.skill, 0)
       const chosen: number[] = []
@@ -122,10 +124,6 @@ function App() {
         const topK = 4
         const topDiff = Math.abs(sumTopK(teamA, topK) - sumTopK(teamB, topK))
 
-        // Weighted score:
-        // - Totals dominate
-        // - Avg is a tiebreaker-ish factor
-        // - EliteCountDiff + stack penalty strongly reduce “95 + 3x85” type outcomes
         const score =
           totalDiff * 10000 +
           avgDiff * 100 +
@@ -160,7 +158,19 @@ function App() {
 
       if (mustIncludeZero) chosen.pop()
 
-      if (!best) throw new Error("No solution found")
+      if (!best) {
+        // should never happen
+        return {
+          teamA: [],
+          teamB: [],
+          totalA: 0,
+          totalB: 0,
+          avgA: 0,
+          avgB: 0,
+          score: Number.POSITIVE_INFINITY,
+        }
+      }
+
       return best
     }
 
@@ -205,7 +215,7 @@ function App() {
     }
   }
 
-  const teams = canShowTeams ? buildOptimalTeams(generatedPlayers) : null
+  const teams: TeamResult | null = canShowTeams ? buildOptimalTeams(generatedPlayers) : null
   const avgDiff = teams ? Math.abs(teams.avgA - teams.avgB) : null
   const totalDiff = teams ? Math.abs(teams.totalA - teams.totalB) : null
 
@@ -436,8 +446,8 @@ function App() {
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              {["A", "B"].map((label) => {
-                const team = label === "A" ? teams!.teamA : teams!.teamB
+              {(["A", "B"] as const).map((label) => {
+                const team: Player[] = label === "A" ? teams!.teamA : teams!.teamB
                 const avg = label === "A" ? teams!.avgA : teams!.avgB
                 const tot = label === "A" ? teams!.totalA : teams!.totalB
 
@@ -475,13 +485,8 @@ function App() {
                     <div style={{ height: 12 }} />
 
                     <ul style={{ padding: 0, margin: 0 }}>
-                      {team.map((p) => (
-                        <PlayerCard
-                          key={p.id}
-                          player={p}
-                          selected={true}
-                          onToggle={togglePlayer}
-                        />
+                      {team.map((p: Player) => (
+                        <PlayerCard key={p.id} player={p} selected={true} onToggle={togglePlayer} />
                       ))}
                     </ul>
                   </div>
