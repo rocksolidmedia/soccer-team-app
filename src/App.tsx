@@ -17,12 +17,46 @@ type TeamResult = {
   avgB: number
 }
 
-type BestCandidate = TeamResult & { score: number }
+type BestCandidate = TeamResult & { score: number; signature: string }
+
+// =====================
+// ✅ Short-term memory (device-only)
+// =====================
+const STORAGE_KEY = "soccer_team_history_v1"
+
+// ✅ Never show the same exact matchup as the last one shown (ABAB…)
+const NO_REPEAT_LAST_N = 1
+
+// Prevent localStorage from growing forever
+const MAX_HISTORY = 50
+
+function getRecentHistory(): string[] {
+  const history: string[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]")
+  return history.slice(-NO_REPEAT_LAST_N)
+}
+
+function pushToHistory(signature: string) {
+  const history: string[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]")
+  const updated = [...history, signature].slice(-MAX_HISTORY)
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+}
+
+function signatureForTeams(teamA: Player[], teamB: Player[]) {
+  const a = teamA.map((p) => p.id).sort((x, y) => x - y).join("-")
+  const b = teamB.map((p) => p.id).sort((x, y) => x - y).join("-")
+  // Normalize A|B vs B|A so they count as the same matchup
+  return a < b ? `${a}|${b}` : `${b}|${a}`
+}
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)]
+}
 
 function App() {
   // STATE
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [generatedIds, setGeneratedIds] = useState<number[] | null>(null)
+  const [teamsOverride, setTeamsOverride] = useState<TeamResult | null>(null)
 
   // Put your lockup logo in /public and set the filename here:
   const logoUrl = "/lockup-logo.png"
@@ -54,10 +88,24 @@ function App() {
     // If teams exist, clicking a player removes them from the generated set AND selection
     // (and because teams are derived from generatedPlayers, they auto-regenerate)
     if (generatedIds && generatedIds.length >= 8) {
-      setGeneratedIds((prev) => (prev ? prev.filter((id) => id !== playerId) : prev))
-      setSelectedIds((prev) =>
-        prev.includes(playerId) ? prev.filter((id) => id !== playerId) : prev
-      )
+      const nextGeneratedIds = generatedIds.filter((id) => id !== playerId)
+
+      const nextSelectedIds = selectedIds.includes(playerId)
+        ? selectedIds.filter((id) => id !== playerId)
+        : [...selectedIds, playerId]
+
+      setGeneratedIds(nextGeneratedIds)
+      setSelectedIds(nextSelectedIds)
+
+      // Recompute teams live (but DO NOT write to history — not a new “generation”)
+      const nextGeneratedPlayers = sortedPlayers.filter((p) => nextGeneratedIds.includes(p.id))
+      if (nextGeneratedPlayers.length >= 8) {
+        const { result } = buildOptimalTeams(nextGeneratedPlayers, [])
+        setTeamsOverride(result)
+      } else {
+        setTeamsOverride(null)
+      }
+
       return
     }
 
@@ -68,19 +116,34 @@ function App() {
 
   function generateTeams() {
     if (!canGenerate) return
+
+    const selectedPlayers = sortedPlayers.filter((p) => selectedIds.includes(p.id))
+    const recent = getRecentHistory()
+
+    const { result, signature } = buildOptimalTeams(selectedPlayers, recent)
+
     setGeneratedIds([...selectedIds])
+    setTeamsOverride(result)
+
+    // ✅ Only “Make Teams” writes to history (this is a generation)
+    pushToHistory(signature)
   }
 
   function clearTeams() {
     setGeneratedIds(null)
     setSelectedIds([])
+    setTeamsOverride(null)
   }
 
   // ✅ TEAM LOGIC — Optimal split with “stacking penalty”
-  // - Even selected => equal team sizes ALWAYS
-  // - Odd selected  => extra player goes to weaker team (by average)
-  // - Score prioritizes: TOTAL difference, then AVG diff, then anti-stacking
-  function buildOptimalTeams(playersToSplit: Player[]): TeamResult {
+  // Implements:
+  // 1) pick best possible
+  // 2) avoid last matchup
+  // 3) if multiple equally-good ways to achieve best non-repeat (true tie), pick random
+  function buildOptimalTeams(playersToSplit: Player[], recentSignatures: string[]): {
+    result: TeamResult
+    signature: string
+  } {
     const n = playersToSplit.length
     const big = Math.ceil(n / 2)
 
@@ -90,10 +153,9 @@ function App() {
     }
 
     function solveForTeamASize(teamASize: number): BestCandidate {
-      let best: BestCandidate | null = null
-
       const totalAll = playersToSplit.reduce((s, p) => s + p.skill, 0)
       const chosen: number[] = []
+      const candidates: BestCandidate[] = []
 
       function evaluateChoice() {
         const teamA = chosen.map((i) => playersToSplit[i])
@@ -110,17 +172,14 @@ function App() {
         const avgDiff = Math.abs(avgA - avgB)
 
         // --- Anti-stacking controls (soccer-feel)
-        // 1) Spread “elite” players (85+) across teams
         const ELITE = 85
         const eliteA = teamA.filter((p) => p.skill >= ELITE).length
         const eliteB = teamB.filter((p) => p.skill >= ELITE).length
         const eliteCountDiff = Math.abs(eliteA - eliteB)
 
-        // 2) Penalize “super stacks” (3+ elites on one team)
         const eliteStackPenalty =
           (eliteA >= 3 ? (eliteA - 2) * 2 : 0) + (eliteB >= 3 ? (eliteB - 2) * 2 : 0)
 
-        // 3) Penalize top-end clustering (top 4 sum difference)
         const topK = 4
         const topDiff = Math.abs(sumTopK(teamA, topK) - sumTopK(teamB, topK))
 
@@ -131,9 +190,9 @@ function App() {
           eliteCountDiff * 1200 +
           eliteStackPenalty * 3000
 
-        if (!best || score < best.score) {
-          best = { teamA, teamB, totalA, totalB, avgA, avgB, score }
-        }
+        const sig = signatureForTeams(teamA, teamB)
+
+        candidates.push({ teamA, teamB, totalA, totalB, avgA, avgB, score, signature: sig })
       }
 
       // Symmetry cut for even splits: force index 0 into Team A so we don’t test mirror duplicates
@@ -155,11 +214,16 @@ function App() {
 
       const remaining = teamASize - (mustIncludeZero ? 1 : 0)
       backtrack(startIndex, remaining)
-
       if (mustIncludeZero) chosen.pop()
 
-      if (!best) {
-        // should never happen
+      // Sort by score (best first)
+      candidates.sort((a, b) => a.score - b.score)
+
+      // 1) Find best non-recent (this defines the target score bucket)
+      const bestNonRecent =
+        candidates.find((c) => !recentSignatures.includes(c.signature)) ?? candidates[0]
+
+      if (!bestNonRecent) {
         return {
           teamA: [],
           teamB: [],
@@ -168,22 +232,37 @@ function App() {
           avgA: 0,
           avgB: 0,
           score: Number.POSITIVE_INFINITY,
+          signature: "EMPTY",
         }
       }
 
-      return best
+      // 2) If there are other candidates with EXACT SAME score and also non-recent,
+      // randomize among them (true tie, no quality loss).
+      const sameScoreNonRecent = candidates.filter(
+        (c) => c.score === bestNonRecent.score && !recentSignatures.includes(c.signature)
+      )
+
+      if (sameScoreNonRecent.length > 1) {
+        return pickRandom(sameScoreNonRecent)
+      }
+
+      // Otherwise return the single best non-recent
+      return bestNonRecent
     }
 
     // EVEN n => equal teams
     if (n % 2 === 0) {
       const best = solveForTeamASize(n / 2)
       return {
-        teamA: best.teamA,
-        teamB: best.teamB,
-        totalA: best.totalA,
-        totalB: best.totalB,
-        avgA: best.avgA,
-        avgB: best.avgB,
+        result: {
+          teamA: best.teamA,
+          teamB: best.teamB,
+          totalA: best.totalA,
+          totalB: best.totalB,
+          avgA: best.avgA,
+          avgB: best.avgB,
+        },
+        signature: best.signature,
       }
     }
 
@@ -202,20 +281,24 @@ function App() {
         totalB: best.totalA,
         avgA: best.avgB,
         avgB: best.avgA,
+        signature: signatureForTeams(best.teamB, best.teamA),
       }
     }
 
     return {
-      teamA: best.teamA,
-      teamB: best.teamB,
-      totalA: best.totalA,
-      totalB: best.totalB,
-      avgA: best.avgA,
-      avgB: best.avgB,
+      result: {
+        teamA: best.teamA,
+        teamB: best.teamB,
+        totalA: best.totalA,
+        totalB: best.totalB,
+        avgA: best.avgA,
+        avgB: best.avgB,
+      },
+      signature: best.signature,
     }
   }
 
-  const teams: TeamResult | null = canShowTeams ? buildOptimalTeams(generatedPlayers) : null
+  const teams: TeamResult | null = canShowTeams ? teamsOverride : null
   const avgDiff = teams ? Math.abs(teams.avgA - teams.avgB) : null
   const totalDiff = teams ? Math.abs(teams.totalA - teams.totalB) : null
 
@@ -430,7 +513,7 @@ function App() {
 
         {/* TEAMS */}
         <section style={{ ...panelStyle, padding: 16 }}>
-          {!canShowTeams ? (
+          {!canShowTeams || !teams ? (
             <div
               style={{
                 color: colors.textDim,
@@ -447,9 +530,9 @@ function App() {
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               {(["A", "B"] as const).map((label) => {
-                const team: Player[] = label === "A" ? teams!.teamA : teams!.teamB
-                const avg = label === "A" ? teams!.avgA : teams!.avgB
-                const tot = label === "A" ? teams!.totalA : teams!.totalB
+                const team: Player[] = label === "A" ? teams.teamA : teams.teamB
+                const avg = label === "A" ? teams.avgA : teams.avgB
+                const tot = label === "A" ? teams.totalA : teams.totalB
 
                 return (
                   <div key={label} style={panelStyle}>
