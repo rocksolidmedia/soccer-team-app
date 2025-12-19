@@ -5,6 +5,7 @@ import PlayerCard from "./PlayerCard"
 
 // layout
 import ControlPanel from "./components/layout/ControlPanel"
+import PlayerPool from "./components/layout/PlayerPool"
 
 // icons
 import { Users } from "lucide-react"
@@ -57,10 +58,6 @@ function App() {
     groups[position].push(player)
     return groups
   }, {} as Record<string, Player[]>)
-
-  function getPositionList(pos: string) {
-    return playersByPosition[pos] ?? []
-  }
 
   // =====================
   // ACTIONS
@@ -210,28 +207,13 @@ function App() {
             colors={colors}
           />
 
-          {/* PLAYER POOL */}
-          <section style={{ ...panelStyle, padding: 16, flex: 1 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-              {["Def", "Mid", "Fwd"].map((pos) => (
-                <div key={pos} style={panelStyle}>
-                  <div style={{ fontWeight: 800, marginBottom: 10, color: colors.textDim }}>
-                    {pos.toUpperCase()}
-                  </div>
-                  <ul style={{ padding: 0, margin: 0 }}>
-                    {getPositionList(pos).map((p) => (
-                      <PlayerCard
-                        key={p.id}
-                        player={p}
-                        selected={selectedIds.includes(p.id)}
-                        onToggle={togglePlayer}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </section>
+          <PlayerPool
+            playersByPosition={playersByPosition}
+            selectedIds={selectedIds}
+            onTogglePlayer={togglePlayer}
+            panelStyle={panelStyle}
+            textDimColor={colors.textDim}
+          />
         </div>
 
         {/* TEAMS */}
