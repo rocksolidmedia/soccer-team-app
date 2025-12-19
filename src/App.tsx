@@ -3,24 +3,38 @@ import { players } from "./players"
 import type { Player } from "./types"
 import PlayerCard from "./PlayerCard"
 
-// Lucide (standard icons)
-import { Users, Trash2, Icon } from "lucide-react"
-// Lucide Lab (soccer ball)
-import { soccerBall } from "@lucide/lab"
+// layout
+import ControlPanel from "./components/layout/ControlPanel"
 
-// Extracted logic
-import { buildOptimalTeams, type TeamResult } from "./logic/teamGenerator"
+// icons
+import { Users } from "lucide-react"
+
+// logic
+import { buildOptimalTeams } from "./logic/teamGenerator"
 import { getRecentHistory, pushToHistory } from "./logic/history"
 
+type TeamResult = {
+  teamA: Player[]
+  teamB: Player[]
+  totalA: number
+  totalB: number
+  avgA: number
+  avgB: number
+}
+
 function App() {
+  // =====================
   // STATE
+  // =====================
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [generatedIds, setGeneratedIds] = useState<number[] | null>(null)
   const [teamsOverride, setTeamsOverride] = useState<TeamResult | null>(null)
 
   const logoUrl = "/lockup-logo.png"
 
+  // =====================
   // DERIVED DATA
+  // =====================
   const sortedPlayers: Player[] = [...players].sort((a, b) => b.skill - a.skill)
   const canGenerate = selectedIds.length >= 8
 
@@ -30,7 +44,13 @@ function App() {
 
   const canShowTeams = generatedPlayers.length >= 8
 
-  // Group players by position
+  const teams: TeamResult | null = canShowTeams ? teamsOverride : null
+  const avgDiff = teams ? Math.abs(teams.avgA - teams.avgB) : null
+  const totalDiff = teams ? Math.abs(teams.totalA - teams.totalB) : null
+
+  // =====================
+  // PLAYER GROUPING
+  // =====================
   const playersByPosition = sortedPlayers.reduce((groups, player) => {
     const position = player.position
     if (!groups[position]) groups[position] = []
@@ -42,29 +62,22 @@ function App() {
     return playersByPosition[pos] ?? []
   }
 
-  // ✅ FIXED: toggle logic now supports add + remove with auto-rebalance
+  // =====================
+  // ACTIONS
+  // =====================
   function togglePlayer(playerId: number) {
-    // If teams already exist, auto-update generated set
-    if (generatedIds) {
-      const isInGenerated = generatedIds.includes(playerId)
-
-      const nextGeneratedIds = isInGenerated
-        ? generatedIds.filter((id) => id !== playerId)
-        : [...generatedIds, playerId]
-
+    // If teams already exist, auto-recompute live
+    if (generatedIds && generatedIds.length >= 8) {
       const nextSelectedIds = selectedIds.includes(playerId)
         ? selectedIds.filter((id) => id !== playerId)
         : [...selectedIds, playerId]
 
-      setGeneratedIds(nextGeneratedIds)
       setSelectedIds(nextSelectedIds)
+      setGeneratedIds(nextSelectedIds)
 
-      const nextGeneratedPlayers = sortedPlayers.filter((p) =>
-        nextGeneratedIds.includes(p.id)
-      )
-
-      if (nextGeneratedPlayers.length >= 8) {
-        const { result } = buildOptimalTeams(nextGeneratedPlayers, [])
+      if (nextSelectedIds.length >= 8) {
+        const nextPlayers = sortedPlayers.filter((p) => nextSelectedIds.includes(p.id))
+        const { result } = buildOptimalTeams(nextPlayers, [])
         setTeamsOverride(result)
       } else {
         setTeamsOverride(null)
@@ -73,7 +86,7 @@ function App() {
       return
     }
 
-    // No teams yet → just toggle selection
+    // Pre-generation selection
     setSelectedIds((prev) =>
       prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]
     )
@@ -98,11 +111,9 @@ function App() {
     setTeamsOverride(null)
   }
 
-  const teams: TeamResult | null = canShowTeams ? teamsOverride : null
-  const avgDiff = teams ? Math.abs(teams.avgA - teams.avgB) : null
-  const totalDiff = teams ? Math.abs(teams.totalA - teams.totalB) : null
-
+  // =====================
   // STYLES
+  // =====================
   const R = 12
 
   const colors = {
@@ -164,6 +175,9 @@ function App() {
     background: colors.border,
   }
 
+  // =====================
+  // RENDER
+  // =====================
   return (
     <div
       style={{
@@ -171,99 +185,31 @@ function App() {
         background: colors.bg,
         color: colors.text,
         padding: 16,
-        fontFamily:
-          "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {/* TOP ROW */}
         <div style={{ display: "flex", gap: 16, alignItems: "stretch" }}>
-          {/* SIDEBAR */}
-          <aside
-            style={{
-              ...panelStyle,
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-            }}
-          >
-            {/* LOGO */}
-            <div
-              style={{
-                height: 46,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <img
-                src={logoUrl}
-                alt="Logo"
-                style={{
-                  height: 40,
-                  width: "auto",
-                  maxWidth: 200,
-                  objectFit: "contain",
-                  pointerEvents: "none",
-                }}
-              />
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            {/* STATS */}
-            <div style={statsBoxStyle}>
-              <div style={statsRowStyle}>
-                <span style={statsLabelStyle}>Players</span>
-                <span>{sortedPlayers.length}</span>
-              </div>
-              <div style={dividerStyle} />
-              <div style={statsRowStyle}>
-                <span style={statsLabelStyle}>Selected</span>
-                <span>{selectedIds.length}</span>
-              </div>
-              <div style={dividerStyle} />
-              <div style={statsRowStyle}>
-                <span style={statsLabelStyle}>Avg. Dif</span>
-                <span>{avgDiff ?? "—"}</span>
-              </div>
-              <div style={dividerStyle} />
-              <div style={statsRowStyle}>
-                <span style={statsLabelStyle}>Total Dif</span>
-                <span>{totalDiff ?? "—"}</span>
-              </div>
-            </div>
-
-            <div style={{ marginTop: "auto" }} />
-
-            {/* Buttons */}
-            <div style={{ display: "grid", gap: 10 }}>
-              <button
-                onClick={generateTeams}
-                disabled={!canGenerate}
-                style={{
-                  ...buttonStyle,
-                  background: !canGenerate ? colors.chip : colors.green,
-                  color: !canGenerate ? colors.textDim : colors.greenText,
-                }}
-              >
-                <Icon iconNode={soccerBall} size={18} />
-                Make Teams
-              </button>
-
-              <button
-                onClick={clearTeams}
-                style={{
-                  ...buttonStyle,
-                  background: colors.redDark,
-                  color: "#fff",
-                }}
-              >
-                <Trash2 size={18} />
-                Clear Teams
-              </button>
-            </div>
-          </aside>
+          <ControlPanel
+            logoUrl={logoUrl}
+            playersCount={sortedPlayers.length}
+            selectedCount={selectedIds.length}
+            avgDiff={avgDiff}
+            totalDiff={totalDiff}
+            canGenerate={canGenerate}
+            canShowTeams={canShowTeams}
+            onGenerateTeams={generateTeams}
+            onClearTeams={clearTeams}
+            panelStyle={panelStyle}
+            buttonStyle={buttonStyle}
+            statsBoxStyle={statsBoxStyle}
+            statsRowStyle={statsRowStyle}
+            statsLabelStyle={statsLabelStyle}
+            dividerStyle={dividerStyle}
+            colors={colors}
+            R={R}
+          />
 
           {/* PLAYER POOL */}
           <section style={{ ...panelStyle, padding: 16, flex: 1 }}>
@@ -316,24 +262,38 @@ function App() {
                   <div key={label} style={panelStyle}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                       <div style={{ fontWeight: 850 }}>Team {label}</div>
+
                       <div style={{ display: "flex", gap: 10 }}>
-                        <div style={{ ...panelStyle, padding: "10px 12px" }}>
+                        <div
+                          style={{
+                            background: colors.chip,
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: R,
+                            padding: "10px 12px",
+                            fontWeight: 650,
+                          }}
+                        >
                           Avg {avg.toFixed(1)}
                         </div>
-                        <div style={{ ...panelStyle, padding: "10px 12px" }}>
+                        <div
+                          style={{
+                            background: colors.chip,
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: R,
+                            padding: "10px 12px",
+                            fontWeight: 650,
+                          }}
+                        >
                           Tot {tot}
                         </div>
                       </div>
                     </div>
 
+                    <div style={{ height: 12 }} />
+
                     <ul style={{ padding: 0, margin: 0 }}>
                       {team.map((p) => (
-                        <PlayerCard
-                          key={p.id}
-                          player={p}
-                          selected
-                          onToggle={togglePlayer}
-                        />
+                        <PlayerCard key={p.id} player={p} selected onToggle={togglePlayer} />
                       ))}
                     </ul>
                   </div>
