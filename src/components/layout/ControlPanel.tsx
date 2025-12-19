@@ -34,7 +34,6 @@ type Props = {
     greenText: string
     redDark: string
   }
-  R: number
 }
 
 export default function ControlPanel({
@@ -54,7 +53,6 @@ export default function ControlPanel({
   statsLabelStyle,
   dividerStyle,
   colors,
-  R,
 }: Props) {
   return (
     <aside

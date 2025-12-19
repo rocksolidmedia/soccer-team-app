@@ -208,7 +208,6 @@ function App() {
             statsLabelStyle={statsLabelStyle}
             dividerStyle={dividerStyle}
             colors={colors}
-            R={R}
           />
 
           {/* PLAYER POOL */}
