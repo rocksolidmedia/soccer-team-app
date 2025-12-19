@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from "react"
 import { players } from "./data/players"
-import type { Player } from "./types"
+import type { Player } from "./types/player"
 
 // layout
 import ControlPanel from "./components/layout/ControlPanel"

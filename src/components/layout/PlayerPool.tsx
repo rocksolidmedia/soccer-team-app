@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react"
-import type { Player } from "../../types"
+import type { Player } from "../../types/player"
 import PlayerCard from "../ui/PlayerCard"
 
 type Props = {
