@@ -1,14 +1,11 @@
 import { useState, type CSSProperties } from "react"
 import { players } from "./players"
 import type { Player } from "./types"
-import PlayerCard from "./PlayerCard"
 
 // layout
 import ControlPanel from "./components/layout/ControlPanel"
 import PlayerPool from "./components/layout/PlayerPool"
-
-// icons
-import { Users } from "lucide-react"
+import TeamsPanel from "./components/layout/TeamsPanel"
 
 // logic
 import { buildOptimalTeams } from "./logic/teamGenerator"
@@ -216,73 +213,20 @@ function App() {
           />
         </div>
 
-        {/* TEAMS */}
-        <section style={{ ...panelStyle, padding: 16 }}>
-          {!canShowTeams || !teams ? (
-            <div
-              style={{
-                color: colors.textDim,
-                textAlign: "center",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-              }}
-            >
-              <Users size={18} />
-              Teams will appear here after you click <b>Make Teams.</b>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              {(["A", "B"] as const).map((label) => {
-                const team = label === "A" ? teams.teamA : teams.teamB
-                const avg = label === "A" ? teams.avgA : teams.avgB
-                const tot = label === "A" ? teams.totalA : teams.totalB
-
-                return (
-                  <div key={label} style={panelStyle}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <div style={{ fontWeight: 850 }}>Team {label}</div>
-
-                      <div style={{ display: "flex", gap: 10 }}>
-                        <div
-                          style={{
-                            background: colors.chip,
-                            border: `1px solid ${colors.border}`,
-                            borderRadius: R,
-                            padding: "10px 12px",
-                            fontWeight: 650,
-                          }}
-                        >
-                          Avg {avg.toFixed(1)}
-                        </div>
-                        <div
-                          style={{
-                            background: colors.chip,
-                            border: `1px solid ${colors.border}`,
-                            borderRadius: R,
-                            padding: "10px 12px",
-                            fontWeight: 650,
-                          }}
-                        >
-                          Tot {tot}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ height: 12 }} />
-
-                    <ul style={{ padding: 0, margin: 0 }}>
-                      {team.map((p) => (
-                        <PlayerCard key={p.id} player={p} selected onToggle={togglePlayer} />
-                      ))}
-                    </ul>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </section>
+        <TeamsPanel
+          teams={teams}
+          canShowTeams={canShowTeams}
+          onTogglePlayer={togglePlayer}
+          panelStyle={panelStyle}
+          chipStyle={{
+            background: colors.chip,
+            padding: "10px 12px",
+            fontWeight: 650,
+          }}
+          borderColor={colors.border}
+          radius={R}
+          textDimColor={colors.textDim}
+        />
       </div>
     </div>
   )
