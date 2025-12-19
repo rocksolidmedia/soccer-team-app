@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react"
 import type { Player } from "../../types"
-import PlayerCard from "../../PlayerCard"
+import PlayerCard from "../ui/PlayerCard"
 
 type Props = {
   playersByPosition: Record<string, Player[]>

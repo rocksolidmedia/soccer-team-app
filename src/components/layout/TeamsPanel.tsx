@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react"
-import type { Player } from "../../types"
-import PlayerCard from "../../PlayerCard"
+import type { Player } from "../../types/types"
+import PlayerCard from "../ui/PlayerCard"
 import { Users } from "lucide-react"
 
 type TeamResult = {
